@@ -90,6 +90,7 @@ class EufyMowerCoordinator(DataUpdateCoordinator[dict]):
     async def _async_update_data(self) -> dict:
         """Fetch DPS from device (and optionally cloud settings)."""
         # ── 1. Local DPS (every POLL_INTERVAL seconds) ────────────────────────
+        """
         try:
             result = await self.hass.async_add_executor_job(self._device.status)
         except Exception as exc:  # noqa: BLE001
@@ -122,13 +123,17 @@ class EufyMowerCoordinator(DataUpdateCoordinator[dict]):
         # Successful poll — reset the error counter
         self._consecutive_errors = 0
 
-        dps: dict = result.get("dps", {})
+        dps: dict = result.get("dps", {}) """
+
 
         # ── 2. Cloud settings (every CLOUD_POLL_INTERVAL seconds) ─────────────
         if self.cloud_client is not None:
-            dps = await self.hass.async_add_executor_job(
-                        self.cloud_client.get_dps
-                    )
+            try:
+                dps = await self.hass.async_add_executor_job(
+                    self.cloud_client.get_dps
+                )
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.warning("Cloud DPS fetch failed: %s", exc)
             _LOGGER.debug("Cloud DPS fetched: %s", dps)
             now = time.monotonic()
             if now - self._cloud_last_fetch >= CLOUD_POLL_INTERVAL:
@@ -156,7 +161,8 @@ class EufyMowerCoordinator(DataUpdateCoordinator[dict]):
                     for key in _CLOUD_KEYS:
                         if key in self.data:
                             dps[key] = self.data[key]
-
+        else:
+            dps["fail"] = true
         return dps
 
     # ── commands ──────────────────────────────────────────────────────────────
