@@ -1,12 +1,12 @@
 {
-  "domain": "eufy_robomow",
-  "name": "Eufy Robomow",
+  "domain": "eufy_e15_e18",
+  "name": "Eufy E15 E18",
   "version": "0.3.0",
   "config_flow": true,
-  "documentation": "https://github.com/jnicolaes/eufy-robomow-ha",
-  "issue_tracker": "https://github.com/jnicolaes/eufy-robomow-ha/issues",
+  "documentation": "https://github.com/xtinos84x/eufy_e15_e18",
+  "issue_tracker": "https://github.com/xtinos84x/eufy_e15_e18/issues",
   "requirements": ["tinytuya>=1.13.0", "requests>=2.31.0"],
   "dependencies": [],
-  "codeowners": ["@jnicolaes"],
+  "codeowners": ["@xtinos84x"],
   "iot_class": "local_polling"
 }

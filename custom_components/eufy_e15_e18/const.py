@@ -1,6 +1,6 @@
 """Constants for the Eufy Robomow integration."""
 
-DOMAIN = "eufy_robomow"
+DOMAIN = "eufy_e15_e18"
 
 # Tuya local protocol
 DEFAULT_PORT = 6668
