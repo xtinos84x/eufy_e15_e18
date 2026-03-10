@@ -155,20 +155,20 @@ class EufyRobomowConfigFlow(ConfigFlow, domain=DOMAIN):
                 #errors["base"] = "unknown"
 
             #if not errors:
-                await self.async_set_unique_id(device_id)
-                self._abort_if_unique_id_configured()
+            await self.async_set_unique_id(device_id)
+            self._abort_if_unique_id_configured()
 
-                device_name = device.get("name") or device.get("productName") or "Eufy E15"
-                return self.async_create_entry(
-                    title=f"{device_name} ({host})",
-                    data={
-                        CONF_HOST:          host,
-                        CONF_DEVICE_ID:     device_id,
-                        CONF_LOCAL_KEY:     local_key,
-                        CONF_EUFY_EMAIL:    self._email,
-                        CONF_EUFY_PASSWORD: self._password,
-                    },
-                )
+            device_name = device.get("name") or device.get("productName") or "Eufy E15"
+            return self.async_create_entry(
+                title=f"{device_name} ({host})",
+                data={
+                    CONF_HOST:          host,
+                    CONF_DEVICE_ID:     device_id,
+                    CONF_LOCAL_KEY:     local_key,
+                    CONF_EUFY_EMAIL:    self._email,
+                    CONF_EUFY_PASSWORD: self._password,
+                },
+            )
 
         # Pre-populate the form with smart defaults
         suggested: dict[str, Any] = {}
