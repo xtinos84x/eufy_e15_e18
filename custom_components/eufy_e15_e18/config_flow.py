@@ -144,31 +144,31 @@ class EufyRobomowConfigFlow(ConfigFlow, domain=DOMAIN):
             local_key = device["localKey"]
 
             # Verify local connectivity
-            #try:
-                #await self.hass.async_add_executor_job(
-                    #_test_local_connection, host, device_id, local_key
-                #)
-            #except CannotConnect:
-                #errors["base"] = "cannot_connect"
-            #except Exception:  # noqa: BLE001
-                #_LOGGER.exception("Unexpected error during local connection test")
-                #errors["base"] = "unknown"
+            try:
+                await self.hass.async_add_executor_job(
+                    _test_local_connection, host, device_id, local_key
+                )
+            except CannotConnect:
+                errors["base"] = "cannot_connect"
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Unexpected error during local connection test")
+                errors["base"] = "unknown"
 
-            #if not errors:
-            await self.async_set_unique_id(device_id)
-            self._abort_if_unique_id_configured()
+            if not errors:
+                await self.async_set_unique_id(device_id)
+                self._abort_if_unique_id_configured()
 
-            device_name = device.get("name") or device.get("productName") or "Eufy E15"
-            return self.async_create_entry(
-                title=f"{device_name} ({host})",
-                data={
-                    CONF_HOST:          host,
-                    CONF_DEVICE_ID:     device_id,
-                    CONF_LOCAL_KEY:     local_key,
-                    CONF_EUFY_EMAIL:    self._email,
-                    CONF_EUFY_PASSWORD: self._password,
-                },
-            )
+                device_name = device.get("name") or device.get("productName") or "Eufy E15"
+                return self.async_create_entry(
+                    title=f"{device_name} ({host})",
+                    data={
+                        CONF_HOST:          host,
+                        CONF_DEVICE_ID:     device_id,
+                        CONF_LOCAL_KEY:     local_key,
+                        CONF_EUFY_EMAIL:    self._email,
+                        CONF_EUFY_PASSWORD: self._password,
+                    },
+                )
 
         # Pre-populate the form with smart defaults
         suggested: dict[str, Any] = {}
