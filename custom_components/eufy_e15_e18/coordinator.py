@@ -123,10 +123,13 @@ class EufyMowerCoordinator(DataUpdateCoordinator[dict]):
         self._consecutive_errors = 0
 
         dps: dict = result.get("dps", {})
-        _LOGGER.debug("DPS update: %s", dps)
 
         # ── 2. Cloud settings (every CLOUD_POLL_INTERVAL seconds) ─────────────
         if self.cloud_client is not None:
+            dps = await self.hass.async_add_executor_job(
+                        self.cloud_client.get_dps
+                    )
+            _LOGGER.debug("Cloud DPS fetched: %s", dps)
             now = time.monotonic()
             if now - self._cloud_last_fetch >= CLOUD_POLL_INTERVAL:
                 try:

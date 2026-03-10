@@ -733,3 +733,12 @@ class EufyCloudClient:
                 "dps": {"155": blob155},
             },
         )
+
+    def get_dps(self) -> dict[str, Any]:
+        dps = self._tuya_request_with_retry(
+            "tuya.m.device.dps.get",
+            data={"devId": self._device_id},
+        )
+        
+        _LOGGER.debug("Cloud dps decoded: %s", dps)
+        return dps
