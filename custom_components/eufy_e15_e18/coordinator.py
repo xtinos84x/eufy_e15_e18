@@ -20,6 +20,7 @@ from .const import (
     CLOUD_TRAVEL_SPEED,
     CLOUD_BLADE_SPEED,
     CLOUD_PAD_DIRECTION,
+    DP_ROBOT_STATUS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -132,6 +133,10 @@ class EufyMowerCoordinator(DataUpdateCoordinator[dict]):
                 dps = await self.hass.async_add_executor_job(
                     self.cloud_client.get_dps
                 )
+
+                robot_status = dps.get(DP_ROBOT_STATUS)
+                dps[DP_ROBOT_STATUS] = self.cloud_client.get_robot_status(robot_status)
+
             except Exception as exc:  # noqa: BLE001
                 _LOGGER.warning("Cloud DPS fetch failed: %s", exc)
             _LOGGER.debug("Cloud DPS fetched: %s", dps)

@@ -742,3 +742,79 @@ class EufyCloudClient:
         
         _LOGGER.debug("Cloud dps decoded: %s", dps)
         return dps
+
+    def protoIdent(self, data: int) -> tuple[int, int]:
+        wire_type = data & 0x07          # Die untersten 3 Bits
+        field_num = data >> 3            # Alles ab dem 4. Bit
+        return field_num, wire_type
+
+    def protoDecodeBlob(self, data: bytes, ident: str) -> dict[str, Any]:   
+        pos = 0
+        decodeValue: dict[str, Any] = {}
+        while pos < len(data):
+            field_num, wire_type = self.protoIdent(data[pos])
+            
+            if wire_type == 0:
+                #Type - VARINT	int32, int64, uint32, uint64, sint32, sint64, bool, enum
+                length = len(data) - (pos + 1)
+                data_field_id: str = ident + "." + str(field_num)
+                if length == 1:
+                    decodeValue[data_field_id] = data[pos+1]
+                elif length == 2:
+                    decodeValue[data_field_id] = data[pos+1]
+                elif length == 4:
+                    subblob = data[pos + 1: pos + 1 + length]
+                    decodeValue[data_field_id] = int.from_bytes(subblob, byteorder='little', signed=True)
+                elif length == 8:
+                    subblob = data[pos + 1: pos + 1 + length]
+                    decodeValue[data_field_id] = int.from_bytes(subblob, byteorder='little', signed=True)
+                pos += 1 + length
+            elif wire_type == 1:
+                #Type - I64	fixed64, sfixed64, double
+                _LOGGER.debug("Wire_Type 1 not supported")
+                break;
+            elif wire_type == 2:
+                #Type - LEN	string, bytes, embedded messages, packed repeated fields
+                length = data[pos+1]
+                data_field_id: str = ident + "." + str(field_num)
+                field_num_check, wire_type_check = self.protoIdent(data[pos+2])
+                if field_num_check == 1 and wire_type_check in(0,2):
+                    if length > 0:
+                        subblob = inner = data[pos + 2 : pos + 2 + length]
+                        subDecodeValues = self.protoDecodeBlob(subblob, data_field_id)
+                        decodeValue.update(subDecodeValues)
+                    else:
+                        decodeValue[data_field_id] = "";
+                else:
+                    decodeValue[data_field_id] = data[pos + 2 : pos + 2 + length]
+                pos += 2 + length
+            elif wire_type == 3:
+                #Type - SGROUP	group start (deprecated)
+                _LOGGER.debug("Wire_Type 3 not supported")
+                break;
+            elif wire_type == 4:
+                #Type - EGROUP	group end (deprecated)
+                _LOGGER.debug("Wire_Type 4 not supported")
+                break;
+            elif wire_type == 5:
+                #Type - I32	fixed32, sfixed32, float
+                _LOGGER.debug("Wire_Type 5 not supported")
+                break;
+            else:
+                _LOGGER.debug(f"Unsupported Wire_Type {wire_type}")
+                break;
+        return decodeValue
+
+    def protoDecode(self, blob: str, ident: str) -> dict[str, Any]:
+        data = base64.b64decode(blob)
+        #data_hex = base64.b64decode(blob).hex()
+        #print(data_hex)
+        decodeValue: dict[str, Any] = self.protoDecodeBlob(data, ident)
+        return decodeValue
+
+    def get_robot_status(self, robot_status_raw: str) -> int:
+        robot_status = self.protoDecode(robot_status_raw, "107")
+        _LOGGER.debug("Robot status decoded: %s", robot_status)
+        if "107.4" in robot_status and isinstance(robot_status["107.4"], int):
+            return robot_status["107.4"]
+        return 0
