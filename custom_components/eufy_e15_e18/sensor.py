@@ -25,6 +25,8 @@ from .const import (
     DP_NETWORK,
     DP_PROGRESS,
     DP_TOTAL_TIME,
+    DP_ROBOT_STATUS,
+    DP_WIFI_SIGNAL_STRENGTH,
 )
 from .coordinator import EufyMowerCoordinator
 
@@ -84,6 +86,15 @@ SENSORS: tuple[EufySensorDescription, ...] = (
         dp=DP_ROBOT_STATUS,
         name="Robot Status",
         icon="mdi:robot",
+    ),
+    EufySensorDescription(
+        key="wifisignalstrength",
+        dp=DP_WIFI_SIGNAL_STRENGTH,
+        name="WiFi Signal Strength",
+        device_class=SensorDeviceClass.SIGNAL_STRENGTH,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=PERCENTAGE,
+        icon="mdi:wifi",
     ),
 )
 

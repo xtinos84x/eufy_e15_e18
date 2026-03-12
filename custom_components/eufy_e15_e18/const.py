@@ -60,6 +60,7 @@ DP_TASK_ACTIVE = "1"  # bool  True = a mowing/returning session is running
 DP_PAUSED = "2"  # bool  True = session paused, False = actively moving
 DP_BATTERY = "8"  # int   Battery level 0–100 %
 DP_ROBOT_STATUS = "107"  # str   Protobuf-encoded blob with robot status details
+DP_WIFI_SIGNAL_STRENGTH = "109"  # int   0–100 % signal strength 
 DP_CUT_HEIGHT = "110"  # int   Blade height in mm (e.g. 40)
 DP_PROGRESS = "118"  # int   0–100 % progress of current action
 #       0   = idle / mowing

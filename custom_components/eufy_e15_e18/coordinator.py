@@ -21,6 +21,7 @@ from .const import (
     CLOUD_BLADE_SPEED,
     CLOUD_PAD_DIRECTION,
     DP_ROBOT_STATUS,
+    DP_WIFI_SIGNAL_STRENGTH,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -136,6 +137,8 @@ class EufyMowerCoordinator(DataUpdateCoordinator[dict]):
 
                 robot_status = dps.get(DP_ROBOT_STATUS)
                 dps[DP_ROBOT_STATUS] = self.cloud_client.get_robot_status(robot_status)
+                wifi_signal_strength = dps.get("109")
+                dps[DP_WIFI_SIGNAL_STRENGTH] = wifi_signal_strength
 
             except Exception as exc:  # noqa: BLE001
                 _LOGGER.warning("Cloud DPS fetch failed: %s", exc)
