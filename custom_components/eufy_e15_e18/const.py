@@ -41,6 +41,9 @@ EDGE_DISTANCE_STEP = 1  # cm
 PATH_DISTANCE_OPTIONS: list[str] = ["8 cm", "10 cm", "12 cm"]
 PATH_DISTANCE_MM: dict[str, int] = {"8 cm": 80, "10 cm": 100, "12 cm": 120}
 
+# ── Fault type — app has exactly 7 options ────────────────────────────────────
+FAUL_TYPE_OPTIONS: dict[int, str] = {1: "edge_sweep", 2: "middle_sweep", 3: "left_wheel", 4: "right_wheel", 5: "garbage_box", 6: "land_check", 7: "collision"}
+
 # ── Pad direction (mowing path angle) — DP155 field 4 ─────────────────────────
 # Stored as an integer in DP155 field 4, sub-field 2, inner field 1.
 # Scale: 1 unit = 1 degree.  Reference direction: 0 = west (9 o'clock position).
@@ -59,6 +62,7 @@ PAD_DIRECTION_STEP = 1   # degrees
 DP_TASK_ACTIVE = "1"  # bool  True = a mowing/returning session is running
 DP_PAUSED = "2"  # bool  True = session paused, False = actively moving
 DP_BATTERY = "8"  # int   Battery level 0–100 %
+DP_FAULT_TYPE = "28"  # int   Fault code (0 = no fault)
 DP_ROBOT_STATUS = "107"  # str   Protobuf-encoded blob with robot status details
 DP_WIFI_SIGNAL_STRENGTH = "109"  # int   0–100 % signal strength 
 DP_CUT_HEIGHT = "110"  # int   Blade height in mm (e.g. 40)
