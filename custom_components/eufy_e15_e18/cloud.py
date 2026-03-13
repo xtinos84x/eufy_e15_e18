@@ -1,5 +1,5 @@
-"""Eufy cloud settings client.
 
+"""Eufy cloud settings client.
 Authenticates via Eufy/Tuya mobile API (same flow as eufy-clean-local-key-grabber)
 and reads/writes DP155, a base64-encoded protobuf blob that stores the five
 cloud-managed settings for the E15:
@@ -37,6 +37,16 @@ import uuid
 from typing import Any
 
 import requests
+
+from .const import (
+    DP_ROBOT_STATUS,
+    DP_WIFI_SIGNAL_STRENGTH,
+    DP_FAULT_TYPE,
+    FAUL_TYPE_OPTIONS,
+    DP_ADVANCED_SETTINGS,
+    DP_ADSET_RAIN_DETECTION_SENSITIVITY,
+    DP_ADSET_RAIN_DETECTION,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -766,6 +776,8 @@ class EufyCloudClient:
             if wire_type == 0:
                 #Type - VARINT	int32, int64, uint32, uint64, sint32, sint64, bool, enum
                 length = len(data) - (pos + 1)
+                if length %2 != 0:
+                    length = 1
                 data_field_id: str = ident + "." + str(field_num)
                 if length == 1:
                     decodeValue[data_field_id] = data[pos+1]
@@ -822,8 +834,17 @@ class EufyCloudClient:
         return decodeValue
 
     def get_robot_status(self, robot_status_raw: str) -> int:
-        robot_status = self.protoDecode(robot_status_raw, "107")
+        robot_status = self.protoDecode(robot_status_raw, DP_ROBOT_STATUS)
         _LOGGER.debug("Robot status decoded: %s", robot_status)
         if "107.4" in robot_status and isinstance(robot_status["107.4"], int):
             return robot_status["107.4"]
         return 0
+
+    def get_advanced_settings(self, advanced_settings_raw: str) -> dict[str, Any]:
+        adset_ret: dict[str, Any] = {}
+        adset = self.protoDecode(advanced_settings_raw, "150")
+        adset_ret[DP_ADSET_RAIN_DETECTION_SENSITIVITY] = adset.get("150.6.1", 0) #rain detection sensitivity
+        adset_ret[DP_ADSET_RAIN_DETECTION] = adset.get("150.10.1", 0) #rain detection
+        
+        _LOGGER.debug("Advanced settings decoded: %s", adset_ret)
+        return adset_ret

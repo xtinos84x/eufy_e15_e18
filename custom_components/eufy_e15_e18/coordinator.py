@@ -24,6 +24,7 @@ from .const import (
     DP_WIFI_SIGNAL_STRENGTH,
     DP_FAULT_TYPE,
     FAUL_TYPE_OPTIONS,
+    DP_ADVANCED_SETTINGS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -145,6 +146,7 @@ class EufyMowerCoordinator(DataUpdateCoordinator[dict]):
                 dps[DP_WIFI_SIGNAL_STRENGTH] = wifi_signal_strength
                 fault_type_code = dps_raw.get(DP_FAULT_TYPE)
                 dps[DP_FAULT_TYPE] = FAUL_TYPE_OPTIONS.get(int(fault_type_code), "None")
+                advancedSettingsRaw = dps_raw.get(DP_ADVANCED_SETTINGS)
                 
                 _LOGGER.debug("robot status: %s \n Wifi signal strength: %s \n fault type: %s - %s", dps[DP_ROBOT_STATUS], dps[DP_WIFI_SIGNAL_STRENGTH], fault_type_code, dps[DP_FAULT_TYPE])
 

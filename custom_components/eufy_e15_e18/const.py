@@ -76,6 +76,9 @@ DP_AREA = "126"  # int   Mowed area counter (exact unit unconfirmed)
 DP_TOTAL_TIME = "125"  # int   Total mow time — ~6.6 sec/unit
 #       36149 units ≈ 66h (app: 2d 18h) ✓
 DP_NETWORK = "134"  # str   "Wifi" or "Cellular"
+DP_ADVANCED_SETTINGS = "150"  # str   Protobuf-encoded blob with advanced settings details
+DP_ADSET_RAIN_DETECTION_SENSITIVITY = "150.6.1" # int rain detection sensitivity (higher = more sensitive)
+DP_ADSET_RAIN_DETECTION = "150.10.1" # bool rain detection (duplicate of DP101, but with more reliable updates)
 
 # ── DPS WRITE (commands) ──────────────────────────────────────────────────────
 # NOTE: These have NOT yet been confirmed by writing locally.
