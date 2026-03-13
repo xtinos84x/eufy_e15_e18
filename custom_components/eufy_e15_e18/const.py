@@ -63,6 +63,7 @@ DP_TASK_ACTIVE = "1"  # bool  True = a mowing/returning session is running
 DP_PAUSED = "2"  # bool  True = session paused, False = actively moving
 DP_BATTERY = "8"  # int   Battery level 0–100 %
 DP_FAULT_TYPE = "28"  # int   Fault code (0 = no fault)
+DP_RAIN_DETECTION = "101" # bool rain detection
 DP_ROBOT_STATUS = "107"  # str   Protobuf-encoded blob with robot status details
 DP_WIFI_SIGNAL_STRENGTH = "109"  # int   0–100 % signal strength 
 DP_CUT_HEIGHT = "110"  # int   Blade height in mm (e.g. 40)
@@ -70,6 +71,7 @@ DP_PROGRESS = "118"  # int   0–100 % progress of current action
 #       0   = idle / mowing
 #       1-99 = saving map or returning to base
 #       100 = docked / fully done
+DP_BASE_STATION_OPTIME = "125" # Base Station Operating time (exact unit unconfirmed, likely seconds)
 DP_AREA = "126"  # int   Mowed area counter (exact unit unconfirmed)
 DP_TOTAL_TIME = "125"  # int   Total mow time — ~6.6 sec/unit
 #       36149 units ≈ 66h (app: 2d 18h) ✓

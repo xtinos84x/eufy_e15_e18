@@ -736,11 +736,20 @@ class EufyCloudClient:
 
     def get_dps(self) -> dict[str, Any]:
         dps = self._tuya_request_with_retry(
-            "tuya.m.device.dps.get",
+            "tuya.m.device.dp.get",
             data={"devId": self._device_id},
         )
         
         _LOGGER.debug("Cloud dps decoded: %s", dps)
+        return dps
+    
+    def get_device_info(self) -> None:
+        dps = self._tuya_request_with_retry(
+            "tuya.m.device.get",
+            data={"devId": self._device_id},
+        )
+        
+        _LOGGER.debug("Cloud device decoded: %s", dps)
         return dps
 
     def protoIdent(self, data: int) -> tuple[int, int]:

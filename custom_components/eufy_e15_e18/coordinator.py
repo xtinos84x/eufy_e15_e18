@@ -94,7 +94,7 @@ class EufyMowerCoordinator(DataUpdateCoordinator[dict]):
     async def _async_update_data(self) -> dict:
         """Fetch DPS from device (and optionally cloud settings)."""
         # ── 1. Local DPS (every POLL_INTERVAL seconds) ────────────────────────
-        """
+        
         try:
             result = await self.hass.async_add_executor_job(self._device.status)
         except Exception as exc:  # noqa: BLE001
@@ -127,23 +127,26 @@ class EufyMowerCoordinator(DataUpdateCoordinator[dict]):
         # Successful poll — reset the error counter
         self._consecutive_errors = 0
 
-        dps: dict = result.get("dps", {}) """
+        dps: dict = result.get("dps", {}) 
 
 
         # ── 2. Cloud settings (every CLOUD_POLL_INTERVAL seconds) ─────────────
+        #dps: dict[str, Any] = {}
         if self.cloud_client is not None:
+            _LOGGER.debug("cloud_client ok")
             try:
-                dps = await self.hass.async_add_executor_job(
+                dps_raw = await self.hass.async_add_executor_job(
                     self.cloud_client.get_dps
                 )
 
-                robot_status = dps.get(DP_ROBOT_STATUS)
+                robot_status = dps_raw.get(DP_ROBOT_STATUS)
                 dps[DP_ROBOT_STATUS] = self.cloud_client.get_robot_status(robot_status)
-                wifi_signal_strength = dps.get(DP_WIFI_SIGNAL_STRENGTH)
+                wifi_signal_strength = dps_raw.get(DP_WIFI_SIGNAL_STRENGTH)
                 dps[DP_WIFI_SIGNAL_STRENGTH] = wifi_signal_strength
-                fault_type_code = dps.get(DP_FAULT_TYPE)
-                dps[DP_FAULT_TYPE] = FAUL_TYPE_OPTIONS.get(int(fault_type_code), "unknown")
-
+                fault_type_code = dps_raw.get(DP_FAULT_TYPE)
+                dps[DP_FAULT_TYPE] = FAUL_TYPE_OPTIONS.get(int(fault_type_code), "None")
+                
+                _LOGGER.debug("robot status: %s \n Wifi signal strength: %s \n fault type: %s - %s", dps[DP_ROBOT_STATUS], dps[DP_WIFI_SIGNAL_STRENGTH], fault_type_code, dps[DP_FAULT_TYPE])
 
             except Exception as exc:  # noqa: BLE001
                 _LOGGER.warning("Cloud DPS fetch failed: %s", exc)
