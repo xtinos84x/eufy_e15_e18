@@ -833,12 +833,13 @@ class EufyCloudClient:
         decodeValue: dict[str, Any] = self.protoDecodeBlob(data, ident)
         return decodeValue
 
-    def get_robot_status(self, robot_status_raw: str) -> int:
+    def get_robot_status(self, robot_status_raw: str) -> dict[str, Any]:
         robot_status = self.protoDecode(robot_status_raw, DP_ROBOT_STATUS)
         _LOGGER.debug("Robot status decoded: %s", robot_status)
-        if "107.4" in robot_status and isinstance(robot_status["107.4"], int):
-            return robot_status["107.4"]
-        return 0
+        return robot_status
+        #if "107.4" in robot_status and isinstance(robot_status["107.4"], int):
+        #    return robot_status["107.4"]
+        #return 0
 
     def get_advanced_settings(self, advanced_settings_raw: str) -> dict[str, Any]:
         adset_ret: dict[str, Any] = {}
