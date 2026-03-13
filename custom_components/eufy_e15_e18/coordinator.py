@@ -140,8 +140,10 @@ class EufyMowerCoordinator(DataUpdateCoordinator[dict]):
                     self.cloud_client.get_dps
                 )
 
-                robot_status = dps_raw.get(DP_ROBOT_STATUS)
-                dps[DP_ROBOT_STATUS] = self.cloud_client.get_robot_status(robot_status)
+                robot_status_raw = dps_raw.get(DP_ROBOT_STATUS)
+                robot_data = self.cloud_client.get_robot_status(robot_status_raw)
+                dps.update(robot_data.copy())
+                
                 wifi_signal_strength = dps_raw.get(DP_WIFI_SIGNAL_STRENGTH)
                 dps[DP_WIFI_SIGNAL_STRENGTH] = wifi_signal_strength
                 fault_type_code = dps_raw.get(DP_FAULT_TYPE)
