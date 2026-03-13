@@ -835,8 +835,13 @@ class EufyCloudClient:
 
     def get_robot_status(self, robot_status_raw: str) -> dict[str, Any]:
         robot_status = self.protoDecode(robot_status_raw, DP_ROBOT_STATUS)
-        _LOGGER.debug("Robot status decoded: %s", robot_status)
-        return robot_status
+        robo_ret: dict[str, Any] = {}
+        robo_ret["107.1"] = robot_status.get("107.1", 0) 
+        robo_ret["107.2"] = robot_status.get("107.2", 0) 
+        robo_ret["107.3"] = robot_status.get("107.3", 0)
+        robo_ret["107.4"] = robot_status.get("107.4", 0) 
+        _LOGGER.debug("Robot status decoded: %s", robo_ret)
+        return robo_ret
         #if "107.4" in robot_status and isinstance(robot_status["107.4"], int):
         #    return robot_status["107.4"]
         #return 0

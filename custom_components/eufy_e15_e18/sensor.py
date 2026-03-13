@@ -109,7 +109,6 @@ SENSORS: tuple[EufySensorDescription, ...] = (
         key="wifisignalstrength",
         dp=DP_WIFI_SIGNAL_STRENGTH,
         name="WiFi Signal Strength",
-        device_class=SensorDeviceClass.SIGNAL_STRENGTH,
         state_class=SensorStateClass.MEASUREMENT,
         native_unit_of_measurement=PERCENTAGE,
         icon="mdi:wifi",
