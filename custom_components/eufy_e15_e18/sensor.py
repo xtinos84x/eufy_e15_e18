@@ -82,6 +82,12 @@ SENSORS: tuple[EufySensorDescription, ...] = (
         icon="mdi:wifi",
     ),
     EufySensorDescription(
+        key="robotstatus",
+        dp="107",
+        name="Robot Status",
+        icon="mdi:robot",
+    ),
+    EufySensorDescription(
         key="robotstatus1",
         dp="107.1",
         name="Robot Status 1",

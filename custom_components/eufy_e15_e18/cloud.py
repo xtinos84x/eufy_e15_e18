@@ -745,6 +745,8 @@ class EufyCloudClient:
         )
 
     def get_dps(self) -> dict[str, Any]:
+        #tuya.m.render.map
+        #tuya.m.device.media.latest
         dps = self._tuya_request_with_retry(
             "tuya.m.device.dp.get",
             data={"devId": self._device_id},
@@ -854,3 +856,46 @@ class EufyCloudClient:
         
         _LOGGER.debug("Advanced settings decoded: %s", adset_ret)
         return adset_ret
+
+    def get_proto_fields(self, b64_str):
+        """Extrahiert Feld-IDs und Werte aus einem Protobuf-String (Varint-basiert)."""
+        if not b64_str: return {}
+        try:
+            data = base64.b64decode(b64_str)
+            fields = {}
+            i = 0
+            while i < len(data):
+                # Erste 3 Bits sind der Typ, Rest ist die Feld-ID
+                field_id = data[i] >> 3
+                # Sehr einfaches Parsing für deine Werte (0-127)
+                if i + 1 < len(data):
+                    value = data[i+1]
+                    fields[field_id] = value
+                i += 2
+            return fields
+        except:
+            return {}
+
+    def decode_eufy_status(self, dp107_b64: str, dp108_b64 : str) -> int:
+        """Übersetzt die DPs 107 und 108 in einen Klartext-Status."""
+        f107 = self.get_proto_fields(dp107_b64)
+        f108 = self.get_proto_fields(dp108_b64)
+
+        # 1. Check Ladezustand (DP 108, Feld 1)
+        is_charging = f108.get(1) == 2
+
+        # 2. Logik-Baum basierend auf deinen Funden
+        if is_charging:
+            return 1
+
+        # Check Arbeitsmodus (DP 107)
+        if f107.get(2) == 5:
+            return 2
+
+        if f107.get(1) == 1 and f107.get(3) == 1:
+            return 3
+
+        if f107.get(4) == 2:
+            return 4
+
+        return 0

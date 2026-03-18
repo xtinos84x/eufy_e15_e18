@@ -25,6 +25,7 @@ from .const import (
     DP_FAULT_TYPE,
     FAUL_TYPE_OPTIONS,
     DP_ADVANCED_SETTINGS,
+    MOWER_STATE, 
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -141,8 +142,13 @@ class EufyMowerCoordinator(DataUpdateCoordinator[dict]):
                 )
 
                 robot_status_raw = dps_raw.get(DP_ROBOT_STATUS)
+                baterie_status_raw = dps_raw.get("108")
                 robot_data = self.cloud_client.get_robot_status(robot_status_raw)
                 dps.update(robot_data.copy())
+                
+                eufy_status_int = self.cloud_client.decode_eufy_status(robot_status_raw, baterie_status_raw)
+                #dps[DP_ROBOT_STATUS] = eufy_status_int
+                dps[DP_ROBOT_STATUS] = MOWER_STATE.get(int(eufy_status_int), "Unknown")
                 
                 wifi_signal_strength = dps_raw.get(DP_WIFI_SIGNAL_STRENGTH)
                 dps[DP_WIFI_SIGNAL_STRENGTH] = wifi_signal_strength
