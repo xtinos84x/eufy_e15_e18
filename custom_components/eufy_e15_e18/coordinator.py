@@ -1,190 +1,242 @@
-"""Sensors for Eufy Robomow."""
+"""DataUpdateCoordinator for Eufy Robomow."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
+import logging
+import time
+from datetime import timedelta
 
-from homeassistant.components.sensor import (
-    SensorDeviceClass,
-    SensorEntity,
-    SensorEntityDescription,
-    SensorStateClass,
-)
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, UnitOfLength, UnitOfTime
+import tinytuya
+
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
     DOMAIN,
-    CONF_DEVICE_ID,
-    DP_BATTERY,
-    DP_AREA,
-    DP_NETWORK,
-    DP_PROGRESS,
-    DP_TOTAL_TIME,
+    TUYA_VERSION,
+    POLL_INTERVAL,
+    CLOUD_POLL_INTERVAL,
+    CLOUD_EDGE_MM,
+    CLOUD_PATH_MM,
+    CLOUD_TRAVEL_SPEED,
+    CLOUD_BLADE_SPEED,
+    CLOUD_PAD_DIRECTION,
     DP_ROBOT_STATUS,
     DP_WIFI_SIGNAL_STRENGTH,
+    DP_FAULT_TYPE,
+    FAUL_TYPE_OPTIONS,
+    DP_ADVANCED_SETTINGS,
+    MOWER_STATE, 
 )
-from .coordinator import EufyMowerCoordinator
 
-# DP125 unit: ~6.6 seconds per unit (confirmed: 36149 units ≈ 66h total)
-DP125_SECONDS_PER_UNIT = 6.6
+_LOGGER = logging.getLogger(__name__)
 
+# After this many consecutive local-poll errors we recreate the tinytuya
+# Device object to flush any stale socket / connection state.
+_MAX_CONSECUTIVE_ERRORS = 5
 
-@dataclass(frozen=True)
-class EufySensorDescription(SensorEntityDescription):
-    dp: str = ""
-
-
-SENSORS: tuple[EufySensorDescription, ...] = (
-    EufySensorDescription(
-        key="battery",
-        dp=DP_BATTERY,
-        name="Battery",
-        device_class=SensorDeviceClass.BATTERY,
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=PERCENTAGE,
-        icon="mdi:battery",
-    ),
-    EufySensorDescription(
-        key="mowed_area",
-        dp=DP_AREA,
-        name="Mowed Area",
-        # Raw counter — exact m² conversion unconfirmed (~9% off vs app).
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        native_unit_of_measurement="units",
-        icon="mdi:grass",
-    ),
-    EufySensorDescription(
-        key="total_time",
-        dp=DP_TOTAL_TIME,
-        name="Total Mow Time",
-        device_class=SensorDeviceClass.DURATION,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-        native_unit_of_measurement=UnitOfTime.HOURS,
-        icon="mdi:clock-outline",
-    ),
-    EufySensorDescription(
-        key="progress",
-        dp=DP_PROGRESS,
-        name="Progress",
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=PERCENTAGE,
-        icon="mdi:progress-clock",
-    ),
-    EufySensorDescription(
-        key="network",
-        dp=DP_NETWORK,
-        name="Network",
-        icon="mdi:wifi",
-    ),
-    EufySensorDescription(
-        key="robotstatus",
-        dp="107",
-        name="Robot Status",
-        icon="mdi:robot",
-    ),
-    EufySensorDescription(
-        key="robotstatus1",
-        dp="107.1",
-        name="Robot Status 1",
-        icon="mdi:robot",
-    ),
-    EufySensorDescription(
-        key="robotstatus2",
-        dp="107.2",
-        name="Robot Status 2",
-        icon="mdi:robot",
-    ),
-    EufySensorDescription(
-        key="robotstatus3",
-        dp="107.3",
-        name="Robot Status 3",
-        icon="mdi:robot",
-    ),
-    EufySensorDescription(
-        key="robotstatus4",
-        dp="107.4",
-        name="Robot Status 4",
-        icon="mdi:robot",
-    ),
-    EufySensorDescription(
-        key="wifisignalstrength",
-        dp=DP_WIFI_SIGNAL_STRENGTH,
-        name="WiFi Signal Strength",
-        state_class=SensorStateClass.MEASUREMENT,
-        native_unit_of_measurement=PERCENTAGE,
-        icon="mdi:wifi",
-    ),
-    EufySensorDescription(
-        key="mowing_schedule",
-        dp="122",
-        name="Mäh-Zeitplan",
-        icon="mdi:calendar-clock",
-    ),
+# Keys kept across polls even when a fresh cloud fetch fails
+_CLOUD_KEYS = (
+    CLOUD_EDGE_MM,
+    CLOUD_PATH_MM,
+    CLOUD_TRAVEL_SPEED,
+    CLOUD_BLADE_SPEED,
+    CLOUD_PAD_DIRECTION,
 )
 
 
-async def async_setup_entry(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
-) -> None:
-    coordinator: EufyMowerCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(
-        EufySensor(coordinator, entry, desc) for desc in SENSORS
-    )
+class EufyMowerCoordinator(DataUpdateCoordinator[dict]):
+    """Polls the Eufy E15 via Tuya local protocol every POLL_INTERVAL seconds.
 
-
-class EufySensor(CoordinatorEntity[EufyMowerCoordinator], SensorEntity):
-    """A sensor that reads one DPS value."""
-
-    entity_description: EufySensorDescription
-    _attr_has_entity_name = True
+    If an EufyCloudClient is provided, cloud settings (DP155) are also polled,
+    but only once every CLOUD_POLL_INTERVAL seconds to avoid hammering the API.
+    """
 
     def __init__(
         self,
-        coordinator: EufyMowerCoordinator,
-        entry: ConfigEntry,
-        description: EufySensorDescription,
+        hass: HomeAssistant,
+        host: str,
+        device_id: str,
+        local_key: str,
+        cloud_client=None,   # EufyCloudClient | None  (avoid circular import)
     ) -> None:
-        super().__init__(coordinator)
-        self.entity_description = description
-        self._attr_unique_id = f"{entry.data[CONF_DEVICE_ID]}_{description.key}"
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.data[CONF_DEVICE_ID])},
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=DOMAIN,
+            update_interval=timedelta(seconds=POLL_INTERVAL),
         )
+        self.host = host
+        self.device_id = device_id
+        self.local_key = local_key
+        self.cloud_client = cloud_client
 
-    @property
-    def native_value(self) -> Any:
-        raw = self.coordinator.data.get(self.entity_description.dp)
-        if raw is None:
-            return None
-        # Convert DP125 raw units → hours
-        if self.entity_description.dp == DP_TOTAL_TIME:
-            return round((raw * DP125_SECONDS_PER_UNIT) / 3600, 1)
+        self._device = self._make_device()
+        # Use float('-inf') so the first poll always fetches cloud settings
+        self._cloud_last_fetch: float = float("-inf")
+        # Track consecutive local-poll failures to know when to recreate the device
+        self._consecutive_errors: int = 0
 
-        #Schedule plan (DP 122) -> Komplexes Parsing
-        if self.entity_description.dp == "122":
-                if not raw:
-                    return "Kein Plan"
-                # Ersten aktiven Plan suchen
-                active = [p for p in raw if p.get('aktiv') == 'Ja']
-                if active:
-                    return f"{active[0]['tage']}: {active[0]['zeitraum']}"
-                return "Deaktiviert"
+    def _make_device(self) -> tinytuya.Device:
+        d = tinytuya.Device(
+            self.device_id,
+            self.host,
+            self.local_key,
+            version=TUYA_VERSION,
+        )
+        d.set_socketTimeout(5)
+        # Non-persistent: close the TCP socket after every request.
+        # Persistent mode (the default in some tinytuya versions) keeps the
+        # socket open between polls.  When that socket silently dies it is never
+        # freed, causing file-descriptor leaks and eventually OOM / CPU spikes.
+        d.set_socketPersistent(False)
+        return d
 
-        return raw
-    @property
-    def extra_state_attributes(self):
-        """Speichert die komplette Liste der Pläne als Attribut."""
-        if self.entity_description.key == "mowing_schedule":
-            plans = self.coordinator.data.get(self.entity_description.dp)
-            # Hier rufen wir deinen Parser auf
-            return {
-                    "plan": plans if isinstance(plans, list) else []
-            }
-        return None
+    # ── polling ───────────────────────────────────────────────────────────────
+
+    async def _async_update_data(self) -> dict:
+        """Fetch DPS from device (and optionally cloud settings)."""
+        # ── 1. Local DPS (every POLL_INTERVAL seconds) ────────────────────────
+        
+        try:
+            result = await self.hass.async_add_executor_job(self._device.status)
+        except Exception as exc:  # noqa: BLE001
+            # A Python exception from tinytuya (e.g. socket error, SSL error).
+            # Increment the error counter; recreate the device object when the
+            # threshold is reached so stale socket state is fully flushed.
+            self._consecutive_errors += 1
+            if self._consecutive_errors >= _MAX_CONSECUTIVE_ERRORS:
+                _LOGGER.debug(
+                    "Recreating tinytuya device after %d consecutive errors",
+                    self._consecutive_errors,
+                )
+                self._device = self._make_device()
+                self._consecutive_errors = 0
+            raise UpdateFailed(f"Tuya connection error: {exc}") from exc
+
+        if "Error" in result:
+            err = result["Error"]
+            _LOGGER.debug("Tuya poll error: %s (%s)", err, result.get("Err"))
+            self._consecutive_errors += 1
+            if self._consecutive_errors >= _MAX_CONSECUTIVE_ERRORS:
+                _LOGGER.debug(
+                    "Recreating tinytuya device after %d consecutive errors",
+                    self._consecutive_errors,
+                )
+                self._device = self._make_device()
+                self._consecutive_errors = 0
+            raise UpdateFailed(f"Tuya error: {err}")
+
+        # Successful poll — reset the error counter
+        self._consecutive_errors = 0
+
+        dps: dict = result.get("dps", {}) 
+
+
+        # ── 2. Cloud settings (every CLOUD_POLL_INTERVAL seconds) ─────────────
+        #dps: dict[str, Any] = {}
+        if self.cloud_client is not None:
+            _LOGGER.debug("cloud_client ok")
+            try:
+                dps_raw = await self.hass.async_add_executor_job(
+                    self.cloud_client.get_dps
+                )
+
+                robot_status_raw = dps_raw.get(DP_ROBOT_STATUS)
+                baterie_status_raw = dps_raw.get("108")
+                robot_data = self.cloud_client.get_robot_status(robot_status_raw)
+                dps.update(robot_data.copy())
+                
+                eufy_status_int = self.cloud_client.decode_eufy_status(robot_status_raw, baterie_status_raw)
+                #dps[DP_ROBOT_STATUS] = eufy_status_int
+                dps[DP_ROBOT_STATUS] = MOWER_STATE.get(int(eufy_status_int), "Unknown")
+                
+                wifi_signal_strength = dps_raw.get(DP_WIFI_SIGNAL_STRENGTH)
+                dps[DP_WIFI_SIGNAL_STRENGTH] = wifi_signal_strength
+                fault_type_code = dps_raw.get(DP_FAULT_TYPE)
+                dps[DP_FAULT_TYPE] = FAUL_TYPE_OPTIONS.get(int(fault_type_code), "None")
+                
+                schedulePlanRaw = dps_raw.get("122")
+                #_LOGGER.debug("Schedule plan raw: %s", schedulePlanRaw)
+                #schedulePlan = self.cloud_client.decode_eufy_schedule(schedulePlanRaw)
+                #_LOGGER.debug("Schedule plan: %s", schedulePlan)
+                
+                schedulePlan = self.cloud_client.decode_schedule(schedulePlanRaw)
+                
+                dps["122"] = schedulePlan
+                
+                advancedSettingsRaw = dps_raw.get(DP_ADVANCED_SETTINGS)
+                
+                _LOGGER.debug("robot status: %s \n Wifi signal strength: %s \n fault type: %s - %s", dps[DP_ROBOT_STATUS], dps[DP_WIFI_SIGNAL_STRENGTH], fault_type_code, dps[DP_FAULT_TYPE])
+
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.warning("Cloud DPS fetch failed: %s", exc)
+            _LOGGER.debug("Cloud DPS fetched: %s", dps)
+            now = time.monotonic()
+            if now - self._cloud_last_fetch >= CLOUD_POLL_INTERVAL:
+                try:
+                    cloud_settings = await self.hass.async_add_executor_job(
+                        self.cloud_client.get_settings
+                    )
+                    dps[CLOUD_EDGE_MM]       = cloud_settings["edge_mm"]
+                    dps[CLOUD_PATH_MM]       = cloud_settings["path_mm"]
+                    dps[CLOUD_TRAVEL_SPEED]  = cloud_settings["travel_speed"]
+                    dps[CLOUD_BLADE_SPEED]   = cloud_settings["blade_speed"]
+                    dps[CLOUD_PAD_DIRECTION] = cloud_settings["pad_direction"]
+                    self._cloud_last_fetch = now
+                    _LOGGER.debug("Cloud settings refreshed: %s", cloud_settings)
+                except Exception as exc:  # noqa: BLE001
+                    _LOGGER.warning("Cloud settings fetch failed: %s", exc)
+                    # Preserve the previous values so entities don't go unavailable
+                    if self.data:
+                        for key in _CLOUD_KEYS:
+                            if key in self.data:
+                                dps[key] = self.data[key]
+            else:
+                # Not yet due for a cloud refresh — carry forward previous values
+                if self.data:
+                    for key in _CLOUD_KEYS:
+                        if key in self.data:
+                            dps[key] = self.data[key]
+        else:
+            dps["fail"] = true
+        return dps
+
+    # ── commands ──────────────────────────────────────────────────────────────
+
+    async def async_send_command(self, dp: str, value) -> bool:
+        """Write a single DPS value to the device. Returns True on success."""
+        _LOGGER.debug("Sending command DP %s = %s", dp, value)
+        try:
+            result = await self.hass.async_add_executor_job(
+                self._device.set_value, int(dp), value
+            )
+            _LOGGER.debug("Command result: %s", result)
+            # Immediately refresh state
+            await self.async_request_refresh()
+            return True
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.error("Command DP %s = %s failed: %s", dp, value, exc)
+            return False
+
+    async def async_set_cloud_setting(self, **kwargs) -> bool:
+        """Write one or more cloud settings via the Tuya mobile API.
+
+        Keyword arguments: edge_mm, path_mm, travel_speed, blade_speed.
+        Returns True on success.
+        """
+        if not self.cloud_client:
+            _LOGGER.error("async_set_cloud_setting called but no cloud client configured")
+            return False
+
+        def _do_set() -> None:
+            self.cloud_client.set_settings(**kwargs)
+
+        try:
+            await self.hass.async_add_executor_job(_do_set)
+            # Force a cloud re-fetch on the next poll cycle
+            self._cloud_last_fetch = float("-inf")
+            await self.async_request_refresh()
+            return True
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.error("Cloud setting update failed: %s", exc)
+            return False

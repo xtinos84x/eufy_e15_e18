@@ -881,34 +881,31 @@ class EufyCloudClient:
         f108 = self.get_proto_fields(dp108_b64)
 
         # 1. Priorität: Physischer Kontakt zur Station (DP 108)
-        # Feld 1 in DP 108: 1=Voll/Erhaltung, 2=Laden
         status_108 = f108.get(1)
         if status_108 in [1, 2]:
-            return 1 # "charging/in station"
+            return 1 # "In Ladestation"
 
-        # 2. Priorität: Rückfahrt oder Anfahrt
-        # Feld 2 = 5: Rückfahrt zum Dock
-        # Feld 2 = 3: Anfahrt zum Mäh-Bereich (wird hier als "active" gewertet)
+        # 2. Priorität: Rückfahrt zur Station
         sub_mode = f107.get(2)
         if sub_mode == 5:
-            return 2 # "return to home"
+            return 2 # "Rückfahrt zur Station"
 
-        # 3. Priorität: Aktives Mähen oder Anfahrt
-        # Feld 3 (Aktiv-Flag) ist 1
-        # Feld 1 ist 1 (Zufall) oder 10 (Bahnen)
+        # 3. NEU: Fahre zur Position (Anfahrt zum Mäh-Bereich)
+        if sub_mode == 3:
+            return 5 # "Fahre zur Position"
+
+        # 4. Priorität: Aktives Mähen
         is_active = f107.get(3) == 1
         mode_107 = f107.get(1)
-        
-        # Wenn er aktiv ist (Mähen ODER Anfahrt mit Modus 3)
-        if is_active and (mode_107 in [1, 10] or sub_mode == 3):
-            return 3 # "active mowing"
+        if is_active and mode_107 in [1, 10]:
+            return 3 # "Aktives Mähen"
 
-        # 4. Priorität: Standby oder Pause
-        # Feld 4 = 2 ODER DP 107 ist leer (AA==)
+        # 5. Priorität: Standby oder Pause
         if f107.get(4) == 2 or not f107:
-            return 4 # "Standby/Break"
+            return 4 # "Standby/Pause"
 
-        return 0 # "Unkown"
+        return 0 # "Unbekannt"
+
 
 
 

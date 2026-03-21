@@ -119,6 +119,12 @@ SENSORS: tuple[EufySensorDescription, ...] = (
         native_unit_of_measurement=PERCENTAGE,
         icon="mdi:wifi",
     ),
+    EufySensorDescription(
+        key="mowing_schedule",
+        dp="122",
+        name="Mäh-Zeitplan",
+        icon="mdi:calendar-clock",
+    ),
 )
 
 
@@ -160,4 +166,25 @@ class EufySensor(CoordinatorEntity[EufyMowerCoordinator], SensorEntity):
         # Convert DP125 raw units → hours
         if self.entity_description.dp == DP_TOTAL_TIME:
             return round((raw * DP125_SECONDS_PER_UNIT) / 3600, 1)
+
+        #Schedule plan (DP 122) -> Komplexes Parsing
+        if self.entity_description.dp == "122":
+                if not raw:
+                    return "Kein Plan"
+                # Ersten aktiven Plan suchen
+                active = [p for p in raw if p.get('aktiv') == 'Ja']
+                if active:
+                    return f"{active[0]['tage']}: {active[0]['zeitraum']}"
+                return "Deaktiviert"
+
         return raw
+    @property
+    def extra_state_attributes(self):
+        """Speichert die komplette Liste der Pläne als Attribut."""
+        if self.entity_description.key == "mowing_schedule":
+            plans = self.coordinator.data.get(self.entity_description.dp)
+            # Hier rufen wir deinen Parser auf
+            return {
+                    "plan": plans if isinstance(plans, list) else []
+            }
+        return None
