@@ -876,26 +876,112 @@ class EufyCloudClient:
         except:
             return {}
 
-    def decode_eufy_status(self, dp107_b64: str, dp108_b64 : str) -> int:
-        """Übersetzt die DPs 107 und 108 in einen Klartext-Status."""
+    def decode_eufy_status(self, dp107_b64: str, dp108_b64: str) -> int:
         f107 = self.get_proto_fields(dp107_b64)
         f108 = self.get_proto_fields(dp108_b64)
 
-        # 1. Check Ladezustand (DP 108, Feld 1)
-        is_charging = f108.get(1) == 2
+        # 1. Priorität: Physischer Kontakt zur Station (DP 108)
+        # Feld 1 in DP 108: 1=Voll/Erhaltung, 2=Laden
+        status_108 = f108.get(1)
+        if status_108 in [1, 2]:
+            return 1 # "charging/in station"
 
-        # 2. Logik-Baum basierend auf deinen Funden
-        if is_charging:
-            return 1
+        # 2. Priorität: Rückfahrt oder Anfahrt
+        # Feld 2 = 5: Rückfahrt zum Dock
+        # Feld 2 = 3: Anfahrt zum Mäh-Bereich (wird hier als "active" gewertet)
+        sub_mode = f107.get(2)
+        if sub_mode == 5:
+            return 2 # "return to home"
 
-        # Check Arbeitsmodus (DP 107)
-        if f107.get(2) == 5:
-            return 2
+        # 3. Priorität: Aktives Mähen oder Anfahrt
+        # Feld 3 (Aktiv-Flag) ist 1
+        # Feld 1 ist 1 (Zufall) oder 10 (Bahnen)
+        is_active = f107.get(3) == 1
+        mode_107 = f107.get(1)
+        
+        # Wenn er aktiv ist (Mähen ODER Anfahrt mit Modus 3)
+        if is_active and (mode_107 in [1, 10] or sub_mode == 3):
+            return 3 # "active mowing"
 
-        if f107.get(1) == 1 and f107.get(3) == 1:
-            return 3
+        # 4. Priorität: Standby oder Pause
+        # Feld 4 = 2 ODER DP 107 ist leer (AA==)
+        if f107.get(4) == 2 or not f107:
+            return 4 # "Standby/Break"
 
-        if f107.get(4) == 2:
-            return 4
+        return 0 # "Unkown"
 
-        return 0
+
+
+    def decode_schedule(self, raw):
+        if not raw: return []
+    
+        days_map = {1: "Mo", 2: "Di", 3: "Mi", 4: "Do", 5: "Fr", 6: "Sa", 7: "So"}
+    
+        try:
+            data = base64.b64decode(raw)
+            if len(data) < 5:
+                return []
+            length_timeblocks = data[4]
+            if length_timeblocks < 2 :
+                return []
+            final_plans = []
+            pos = 4
+            scheduleBlocks = []
+            while pos < len(data)-2:
+                pos += 1
+                if data[pos] == 0x0A:
+                    # schedule block
+                    length = data[pos+1]
+                    if length > 0:
+                        scheduleBlocks.append(data[pos : pos + length + 2])
+                    pos = pos + 1 + length # set to last byte in field
+                elif data[pos] == 0x12:
+                    length = data[pos+2]
+                    pos = pos + 1 + length
+                elif data[pos] == 0x1A:
+                    length = data[pos+2]
+                    pos = pos + 1 + length
+            for sched in scheduleBlocks:
+                _LOGGER.debug("Schedule block data: %s", sched.hex())
+                days = []
+                id_idx = sched.index(0x10)
+                if id_idx > 0:
+                    days_length = sched[id_idx+7]
+                    _LOGGER.debug("Length days: %i", days_length)
+                    for num in range(days_length):
+                        days.append(days_map[sched[id_idx + 8 + num]])
+                        
+                    length_start = sched[id_idx + 9 + days_length]
+                    start_hour = sched[id_idx + 11 + days_length]
+                    start_min = 0
+                    pos_end = sched.index(0x1A, id_idx + 12 + days_length)
+                    if length_start == 4:
+                        start_min = sched[id_idx + 13 + days_length]
+                        pos_end = sched.index(0x1A, id_idx + 14 + days_length)
+                        
+                    length_end = sched[pos_end + 1]
+                    end_hour = sched[pos_end + 3]
+                    end_min = 0
+                    pos_active = sched.find(0x20, pos_end + 4)
+                    if length_end == 4:
+                        end_min = sched[pos_end + 5]
+                        pos_active = sched.find(0x20, pos_end + 6)
+                        
+                    if pos_active > 0:
+                        p_active = "Ja" if sched[pos_active+1] == 0x02 else "Nein"
+                    else:
+                        p_active = "Ja"
+                        
+                    final_plans.append({
+                            "time": f"{start_hour}:{start_min} - {end_hour}:{end_min}",
+                            "day": days,
+                            "active": p_active,
+                            "zone": "All"
+                        })
+                else:
+                    _LOGGER.debug("Schedule block idex error: %i", id_idx)
+                
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.warning("Failed to parse schedule block with exception: %s", exc)
+            return []
+        return final_plans
