@@ -130,14 +130,6 @@ That's it — no external tools, no manual key extraction.
 
 - **Entities unavailable** — check that the IP address is correct and the mower is on WiFi (not cellular only).
 - **Cloud settings not updating** — cloud data refreshes every 5 minutes; changes made in the Eufy app will appear after the next refresh cycle.
-- Enable **debug logging** for detailed output:
-
-```yaml
-# configuration.yaml
-logger:
-  logs:
-    custom_components.eufy_robomow: debug
-```
 
 ---
 
