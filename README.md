@@ -1,32 +1,81 @@
-# Eufy Robomow — Home Assistant Integration
+# Eufy E15 / E18 — Home Assistant Integration
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 
 A Home Assistant custom integration for the **Eufy E15** and **E18** robotic lawn mowers.
 
-Control and monitor your Eufy mower directly from Home Assistant over your local network, with cloud-synced settings pulled straight from your Eufy account — no extra tools or manual key extraction required.
+The init version is a copy of https://github.com/jnicolaes/eufy-robomow-ha
+
+Development repository. No final integartion.
 
 ---
 
-## Features
+Some code for the HA Dashboard 
 
-| Entity | Type | Description |
-|--------|------|-------------|
-| Mower | `lawn_mower` | Start, pause, dock — with activity state (mowing / returning / docked / paused) |
-| Battery | `sensor` | Battery level (%) |
-| Mowed Area | `sensor` | Area covered in the current or last session |
-| Progress | `sensor` | Return-to-base progress (%) |
-| Network | `sensor` | WiFi / Cellular connection type |
-| Cut Height | `number` | Blade height 25–75 mm, step 5 mm (local, instant) |
-| Edge Distance | `number` | −15 to +15 cm — how far inside/outside the border wire the mower cuts |
-| Pad Direction | `number` | Mowing path angle 0–359° |
-| Travel Speed | `select` | Mower driving speed: slow / normal / fast |
-| Blade Speed | `select` | Blade motor speed: slow / normal / fast |
-| Path Distance | `select` | Lane spacing: 8 cm / 10 cm / 12 cm |
+Mardown for the schedule plan:
+```
+type: markdown
+content: >
+  ### 📅 Mäh-Wochenplan
 
-> **Cloud entities** (edge distance, pad direction, speeds, path distance) require your Eufy account credentials. They are polled every 5 minutes and written back via the Tuya mobile API.
+  {% set tage_namen = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'] %}
 
----
+  {% set heute = now().strftime('%a') %}
+
+  {# Wir greifen auf dein Attribut 'plan' zu #}
+
+  {% set plans = state_attr('sensor.eufy_robomow_e15_mah_zeitplan', 'plan') %}
+
+
+  {% for tag in tage_namen %}
+
+  **{{ '👉 ' if tag == heute }}{{ tag }}{{ ' (HEUTE)' if tag == heute }}**
+
+
+  {% set hat_plan = namespace(found=false) %}
+
+  {% if plans is iterable %}
+    {% for p in plans %}
+      {# Da 'day' bei dir eine echte Liste ist, prüfen wir direkt mit 'in' #}
+      {% if tag in p.day %}
+        {% set hat_plan.found = true %}
+        {% set ist_aktiv = p.active == 'Ja' %}
+  > {{ '🟢' if ist_aktiv else '⚪' }} **{{ 'AKTIV' if ist_aktiv else 'PAUSE'
+  }}**: {{ p.time }} ({{ p.zone }})
+      {% endif %}
+    {% endfor %}
+  {% endif %}
+
+
+  {% if not hat_plan.found %}
+
+  *Kein Mähvorgang geplant*
+
+  {% endif %}
+
+  ---
+
+  {% endfor %}
+```
+
+
+At the moment only the GPS coords will be used.
+
+I use this coords in a map:
+
+```
+type: custom:map-card
+tile_layer_url: https://mt0.google.com/vt/lyrs=s&x={x}&y={y}&z={z}
+tile_layer_options:
+  attribution: Google Satellite
+  maxZoom: 19
+  minZoom: 0
+entities:
+  - entity: sensor.eufy_robomow_e15_roboter_gps
+    name: Eufy E15
+    size: 12
+```
+
 
 ## Prerequisites
 
@@ -38,17 +87,12 @@ Control and monitor your Eufy mower directly from Home Assistant over your local
 
 ## Installation
 
-### Via HACS (recommended)
+### Via HACS
 
 1. Open HACS → **Integrations** → ⋮ → **Custom repositories**
-2. Add URL: `https://github.com/jnicolaes/eufy-robomow-ha` — category: **Integration**
-3. Search for **Eufy Robomow** and install
+2. Add URL: `https://github.com/xtinos84x/eufy_e15_e18` — category: **Integration**
+3. Search for **Eufy e15 e18** and install
 4. Restart Home Assistant
-
-### Manual
-
-1. Copy the `custom_components/eufy_robomow/` folder into your HA `config/custom_components/` directory
-2. Restart Home Assistant
 
 ---
 
