@@ -44,7 +44,7 @@ PATH_DISTANCE_MM: dict[str, int] = {"8 cm": 80, "10 cm": 100, "12 cm": 120}
 # ── Fault type — app has exactly 7 options ────────────────────────────────────
 FAUL_TYPE_OPTIONS: dict[int, str] = {1: "edge_sweep", 2: "middle_sweep", 3: "left_wheel", 4: "right_wheel", 5: "garbage_box", 6: "land_check", 7: "collision"}
 
-MOWER_STATE: dict[int, str] = {0: "Unkown", 1: "charging/in station", 2: "return to home", 3: "active mowing", 4: "Standby/Break", 5: "Move to position"}
+MOWER_STATE: dict[int, str] = {0: "Unkown", 1: "charging/in station", 2: "return to home", 3: "active mowing", 4: "Standby/Break", 5: "Move to position", 6: "idle/in station"}
 
 # ── Pad direction (mowing path angle) — DP155 field 4 ─────────────────────────
 # Stored as an integer in DP155 field 4, sub-field 2, inner field 1.

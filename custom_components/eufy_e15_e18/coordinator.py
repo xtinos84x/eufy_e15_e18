@@ -166,7 +166,22 @@ class EufyMowerCoordinator(DataUpdateCoordinator[dict]):
                 
                 advancedSettingsRaw = dps_raw.get(DP_ADVANCED_SETTINGS)
                 
-                _LOGGER.debug("robot status: %s \n Wifi signal strength: %s \n fault type: %s - %s", dps[DP_ROBOT_STATUS], dps[DP_WIFI_SIGNAL_STRENGTH], fault_type_code, dps[DP_FAULT_TYPE])
+                _LOGGER.debug("\nrobot status: %s \n Wifi signal strength: %s \n fault type: %s - %s", dps[DP_ROBOT_STATUS], dps[DP_WIFI_SIGNAL_STRENGTH], fault_type_code, dps[DP_FAULT_TYPE])
+                
+                raw_142 = dps_raw.get("142")
+                lat, lon = self.cloud_client.extract_eufy_gps(raw_142)
+                if lat and lon:
+                    # Setze die Attribute für deinen Mower-Sensor
+                    dps["coords"] = {"latitude": lat, "longitude": lon}
+
+                media = await self.hass.async_add_executor_job(
+                    self.cloud_client.get_latest_media
+                )
+                
+                #mapData = await self.hass.async_add_executor_job(
+                #    self.cloud_client.get_eufy_map
+                #)
+                
 
             except Exception as exc:  # noqa: BLE001
                 _LOGGER.warning("Cloud DPS fetch failed: %s", exc)
@@ -174,6 +189,10 @@ class EufyMowerCoordinator(DataUpdateCoordinator[dict]):
             now = time.monotonic()
             if now - self._cloud_last_fetch >= CLOUD_POLL_INTERVAL:
                 try:
+                    #await self.hass.async_add_executor_job(
+                    #    self.cloud_client.request_map
+                    #)
+                    
                     cloud_settings = await self.hass.async_add_executor_job(
                         self.cloud_client.get_settings
                     )

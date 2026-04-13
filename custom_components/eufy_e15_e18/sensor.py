@@ -125,6 +125,12 @@ SENSORS: tuple[EufySensorDescription, ...] = (
         name="Mäh-Zeitplan",
         icon="mdi:calendar-clock",
     ),
+    EufySensorDescription(
+        key="mowing_gps",
+        dp="coords",
+        name="Roboter-GPS",
+        icon="mdi:robot",
+    ),
 )
 
 
@@ -187,4 +193,22 @@ class EufySensor(CoordinatorEntity[EufyMowerCoordinator], SensorEntity):
             return {
                     "plan": plans if isinstance(plans, list) else []
             }
+        elif self.entity_description.key == "mowing_gps":
+            data = self.coordinator.data.get(self.entity_description.dp)
+            if isinstance(data, dict) and "latitude" in data:
+                return {
+                    "latitude": data["latitude"],
+                    "longitude": data["longitude"],
+                    "source_type": "gps"
+                }
+
+            # Falls die Daten flach im Coordinator liegen (z.B. als Tupel)
+            if isinstance(data, tuple) and len(data) == 2:
+                return {
+                    "latitude": data[0],
+                    "longitude": data[1],
+                    "source_type": "gps"
+                }
+
+            return {}
         return None

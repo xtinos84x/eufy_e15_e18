@@ -32,6 +32,7 @@ import logging
 import math
 import random
 import string
+import struct
 import time
 import uuid
 from typing import Any
@@ -495,8 +496,18 @@ class EufyCloudClient:
 
         self._eufy_token = data["access_token"]
         self._eufy_uid = data["user_info"]["id"]
+        
+        new_host = data["user_info"]["request_host"]
+
+        # Sicherstellen, dass die URL auf /v1/ endet
+        if not new_host.endswith("/"):
+            new_host += "/"
+        if not "v1/" in new_host:
+            new_host += "v1/"
+
+        self._eufy_base_url = new_host
         # The response contains the correct regional base URL for subsequent calls
-        self._eufy_base_url = data["user_info"]["request_host"]
+        #self._eufy_base_url = data["user_info"]["request_host"]
 
         self._eufy_session.headers.update(
             {"uid": self._eufy_uid, "token": self._eufy_token}
@@ -508,6 +519,92 @@ class EufyCloudClient:
     def _ensure_eufy_session(self) -> None:
         if not self._eufy_token:
             self._eufy_login()
+            
+    def get_eufy_map(self):
+        # Dieser Endpunkt ist typisch für die neuere Anker/Eufy Architektur
+        _LOGGER.debug("Request map from cloud api")
+        
+        # Versuche diesen Endpunkt für die Multi-Map
+        # Versuche diesen Endpunkt (ohne das zusätzliche 'app/')
+        url = self._eufy_base_url + "dispatch" 
+
+        payload = {
+            "method": "ecl_request_map_data_multi",
+            "params": {
+                "devId": self._tuya_device_id,
+                "uid": self._eufy_uid,
+            }
+        }
+
+        # WICHTIG: Eufy erwartet oft spezifische Header für den Dispatcher
+        headers = {
+            "x-eufy-api-token": self._eufy_token,
+            "Content-Type": "application/json"
+        }
+
+        resp = self._eufy_session.post(url, json=payload, headers=headers)
+
+        _LOGGER.debug("Multi-Map Response: %s", resp.text)
+        return None
+        
+        
+        url = self._eufy_base_url + "app/get_latest_map" 
+        params = {
+            "deviceId": self._tuya_device_id,
+            "uid": self._eufy_uid, 
+            "token": self._eufy_token
+        }
+        
+        _LOGGER.debug("URL: %s", url)
+
+        resp = self._eufy_session.get(url, params=params)
+
+        # DEBUG: Zeige uns, was der Server WIRKLICH geschickt hat
+        _LOGGER.debug("Raw Response Status: %s", resp.status_code)
+        _LOGGER.debug("Raw Response Text: %s", resp.text[:500]) # Nur die ersten 500 Zeichen
+
+        try:
+            data = resp.json()
+        except Exception as e:
+            _LOGGER.error("JSON Parsing fehlgeschlagen! Text war vermutlich HTML.")
+            return None
+
+
+        if data.get("code") == 0:
+            map_url = data["data"]["map_url"]
+            _LOGGER.debug("Gefunden! Die Karte liegt hier: %s", map_url)
+            return map_url
+        _LOGGER.debug("Cloud data: %s", data)
+        
+    def get_map_url(self, dev_id: str) -> str | None:
+        """Fragt die Eufy-spezifische API nach der Karten-URL."""
+        # Eufy nutzt oft diesen Endpunkt für Mähroboter-Karten
+        path = "app/get_latest_map" 
+
+        try:
+            # Wir nutzen die eufy_session, die du im Login erstellt hast
+            resp = self._eufy_session.get(
+                f"{self._eufy_base_url}{path}",
+                params={
+                    "devId": dev_id,
+                    "app_version": "2.4.0", # Manchmal erforderlich
+                },
+                timeout=10
+            )
+            data = resp.json()
+
+            # Suche nach der URL in der Antwort
+            if data.get("code") == 0:
+                map_url =  data.get("data", {}).get("map_url")
+                _LOGGER.debug("Gefunden! Die Karte liegt hier: %s", map_url)
+                return map_url
+
+        except Exception as e:
+             _LOGGER.debug("Fehler beim Abrufen der Eufy-Map-URL: %s", e)
+
+        return None
+
+
 
     # ── Tuya mobile API ───────────────────────────────────────────────────────
 
@@ -755,6 +852,34 @@ class EufyCloudClient:
         _LOGGER.debug("Cloud dps decoded: %s", dps)
         return dps
     
+    def get_map(self) -> Any:
+        dps = self._tuya_request_with_retry(
+            "tuya.m.device.map.download",
+            data={"devId": self._device_id},
+        )
+        
+        _LOGGER.debug("Cloud dps decoded: %s", dps)
+        return dps
+    
+    def get_latest_media(self) -> dict[str, Any]:
+        media = self._tuya_request_with_retry(
+            "tuya.m.device.media.latest",
+            data={"devId": self._device_id},
+        )
+        
+        _LOGGER.debug("Cloud latest media decoded: %s", media)
+        return media
+    
+    def request_map(self) -> Any:
+        result = self._tuya_request_with_retry(
+            "tuya.m.device.dp.publish",
+            data={
+                "devId": self._device_id,
+                "dps": {"16": "get_both"}  # Probiere "get_map" oder True (bool)
+            }
+        )
+        _LOGGER.debug("Befehl gesendet: %s", result)
+    
     def get_device_info(self) -> None:
         dps = self._tuya_request_with_retry(
             "tuya.m.device.get",
@@ -884,6 +1009,9 @@ class EufyCloudClient:
         status_108 = f108.get(1)
         if status_108 in [1, 2]:
             return 1 # "In Ladestation"
+        
+        if status_108 is None and f107.get(4) == 1:
+            return 6 # "In Ladestation - idle"
 
         # 2. Priorität: Rückfahrt zur Station
         sub_mode = f107.get(2)
@@ -982,3 +1110,46 @@ class EufyCloudClient:
             _LOGGER.warning("Failed to parse schedule block with exception: %s", exc)
             return []
         return final_plans
+    
+    def extract_eufy_gps(self, payload_b64):
+        """
+        Extrahiert GPS-Koordinaten aus DP 142 ohne externe Libraries.
+        Sucht gezielt nach dem Muster von subMessage_4 (Tag 4).
+        """
+        try:
+            # 1. Base64 zu Bytes
+            data = base64.b64decode(payload_b64)
+
+            # 2. Wir suchen nach dem Muster für subMessage_4 (Tag 4, Wire Type 2)
+            # In deinem Payload beginnt dieser Block oft nach dem Byte 0x22 (Tag 4)
+            # und enthält dann subMessage_2 (Tag 2 / 0x12).
+
+            # Suche nach der Sequenz für subMessage_4 -> subMessage_2 (0x22 ... 0x12)
+            pos = data.find(b'\x22')
+            _LOGGER.debug("GPS Extract pos1: %s", pos)
+            if pos != -1:
+                # Wir springen in den Bereich von subMessage_2
+                sub_data = data[pos:]
+                inner_pos = sub_data.find(b'\x12')
+                
+                _LOGGER.debug("GPS Extract pos2: %s", inner_pos)
+
+                if inner_pos != -1:
+                    # Ab hier liegen die Doubles (Tag 1 = 0x09, Tag 2 = 0x11 für Double)
+                    # Latitude (8 Bytes nach dem 0x09 Tag)
+                    lat_start = sub_data.find(b'\x09', inner_pos) + 1
+                    lat = struct.unpack('<d', sub_data[lat_start:lat_start+8])[0]
+
+                    # Longitude (8 Bytes nach dem 0x11 Tag)
+                    lon_start = sub_data.find(b'\x11', lat_start) + 1
+                    lon = struct.unpack('<d', sub_data[lon_start:lon_start+8])[0]
+                    
+                    _LOGGER.debug("GPS Extract: %s %s", lat, lon)
+
+                    return lat, lon
+        except Exception as e:
+            # Falls das Muster im Stream mal leicht verschoben ist
+            _LOGGER.debug("GPS Extract Exception: %s", e)
+            pass
+
+        return None, None
