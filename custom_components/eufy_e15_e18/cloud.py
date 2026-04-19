@@ -1025,7 +1025,7 @@ class EufyCloudClient:
         # 4. Priorität: Aktives Mähen
         is_active = f107.get(3) == 1
         mode_107 = f107.get(1)
-        if is_active and mode_107 in [1, 10]:
+        if is_active and mode_107 in [1, 10, 17]:
             return 3 # "Aktives Mähen"
 
         # 5. Priorität: Standby oder Pause
