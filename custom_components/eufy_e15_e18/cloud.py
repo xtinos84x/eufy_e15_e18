@@ -1120,31 +1120,24 @@ class EufyCloudClient:
             # 1. Base64 zu Bytes
             data = base64.b64decode(payload_b64)
 
-            # 2. Wir suchen nach dem Muster für subMessage_4 (Tag 4, Wire Type 2)
-            # In deinem Payload beginnt dieser Block oft nach dem Byte 0x22 (Tag 4)
-            # und enthält dann subMessage_2 (Tag 2 / 0x12).
+            # 2. Suche nach subMessage_3 (Tag 3, Wire Type 2 -> 0x1A)
+            # In der Struktur folgt darauf oft subMessage_3 (nochmal Index 3 -> 0x1A)
+            # wo die eigentlichen Double-Werte liegen.
 
-            # Suche nach der Sequenz für subMessage_4 -> subMessage_2 (0x22 ... 0x12)
-            pos = data.find(b'\x22')
-            _LOGGER.debug("GPS Extract pos1: %s", pos)
+            pos = data.find(b'\x1A') # Suche nach Tag 3
             if pos != -1:
-                # Wir springen in den Bereich von subMessage_2
                 sub_data = data[pos:]
-                inner_pos = sub_data.find(b'\x12')
-                
-                _LOGGER.debug("GPS Extract pos2: %s", inner_pos)
+                # Suche den inneren Block für die Koordinaten
+                inner_pos = sub_data.find(b'\x1A', 1) 
 
                 if inner_pos != -1:
-                    # Ab hier liegen die Doubles (Tag 1 = 0x09, Tag 2 = 0x11 für Double)
-                    # Latitude (8 Bytes nach dem 0x09 Tag)
+                    # Suche nach double_1 (Tag 1 -> 0x09)
                     lat_start = sub_data.find(b'\x09', inner_pos) + 1
                     lat = struct.unpack('<d', sub_data[lat_start:lat_start+8])[0]
 
-                    # Longitude (8 Bytes nach dem 0x11 Tag)
+                    # Suche nach double_2 (Tag 2 -> 0x11)
                     lon_start = sub_data.find(b'\x11', lat_start) + 1
                     lon = struct.unpack('<d', sub_data[lon_start:lon_start+8])[0]
-                    
-                    _LOGGER.debug("GPS Extract: %s %s", lat, lon)
 
                     return lat, lon
         except Exception as e:
