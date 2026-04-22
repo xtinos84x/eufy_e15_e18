@@ -59,24 +59,6 @@ content: >
 ```
 
 
-At the moment only the GPS coords will be used.
-
-I use this coords in a map:
-
-```
-type: custom:map-card
-tile_layer_url: https://mt0.google.com/vt/lyrs=s&x={x}&y={y}&z={z}
-tile_layer_options:
-  attribution: Google Satellite
-  maxZoom: 19
-  minZoom: 0
-entities:
-  - entity: sensor.eufy_robomow_e15_roboter_gps
-    name: Eufy E15
-    size: 12
-```
-
-
 ## Prerequisites
 
 - **Local network access** — the mower and Home Assistant must be on the same LAN (or the mower reachable via IP).
